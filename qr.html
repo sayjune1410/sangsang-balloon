@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>상상을 띄우다 | 참여 QR</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="qr-page">
+  <div class="qr-card">
+    <div class="qr-copy">
+      <div class="eyebrow"><span class="dot"></span> 온라인 참여</div>
+      <h1 class="hero-title">상상을 <span class="red">띄우다</span> 🎈</h1>
+      <p>화면의 QR을 촬영해 페이지에 접속한 뒤,<br>앞으로 이루고 싶은 <b>바람이나 다짐</b>을 남겨주세요.</p>
+      <div class="count-pill">현재 <strong data-count>0</strong>개의 상상이 모였어요</div>
+    </div>
+    <div class="qr-box">
+      <div id="qrcode"></div>
+      <div class="qr-url" id="qrUrl"></div>
+    </div>
+  </div>
+</div>
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="app.js"></script>
+<script>
+(async()=>{
+  const A=window.SangsangApp, url=A.getParticipantUrl(); document.getElementById('qrUrl').textContent=url;
+  if(window.QRCode) new QRCode(document.getElementById('qrcode'),{text:url,width:300,height:300,colorDark:'#423b38',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.H});
+  async function refresh(){ try{ const w=await A.listWishes(); A.setCount(w.length); }catch{} }
+  await refresh(); await A.subscribe(refresh);
+})();
+</script>
+</body>
+</html>

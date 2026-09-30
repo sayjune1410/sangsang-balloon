@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>상상을 띄우다 | 온라인 참여</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="page">
+  <div class="grain"></div>
+  <header class="site-header">
+    <div class="eyebrow"><span class="dot"></span> KT&amp;G 장학재단 · 대학 상상장학생 발대식</div>
+    <h1 class="hero-title">상상을 <span class="red">띄우다</span> 🎈</h1>
+    <p class="subtitle">앞으로의 활동을 통해 이루고 싶은 바람이나 다짐을 적어주세요.<br>여러분의 상상이 하나의 풍선이 되어 함께 떠오릅니다.</p>
+    <div class="count-pill">지금까지 <strong data-count>0</strong>개의 상상이 모였어요</div>
+  </header>
+
+  <section class="control-wrap">
+    <div class="control-card">
+      <textarea id="wishInput" maxlength="180" placeholder="예) 새로운 경험 앞에서 망설이지 않고, 올해 꼭 한 번은 용기 내어 도전하기."></textarea>
+      <button class="submit-btn" id="submitBtn">소망 띄우기 ↑</button>
+      <div class="helper"><span>익명으로 표시됩니다 · 최대 180자</span><span id="charCount">0 / 180</span></div>
+    </div>
+  </section>
+  <div class="status-card" id="statusCard"></div>
+
+  <section class="my-wish-wrap" id="myWishWrap">
+    <div class="my-wish-title">방금 띄운 나의 풍선 🎈</div>
+    <div class="my-wish-stage" id="myWishStage"></div>
+    <button class="find-mine-btn" id="findMineBtn">🎈 전체 풍선 속에서 내 풍선 보기</button>
+  </section>
+
+  <main class="sky">
+    <div class="cloud c1"></div><div class="cloud c2"></div>
+    <h2 class="section-title">우리의 상상이 모이고 있어요</h2>
+    <div class="wall-grid" id="balloonField"></div>
+  </main>
+  <div class="footer-note">온라인 참여 페이지 · 입력한 내용은 익명 풍선으로 표시됩니다.</div>
+</div>
+
+<div class="modal" id="modal"><div class="modal-card"><button class="close" id="closeModal">×</button><h3>작은 상상 🎈</h3><p id="modalText"></p></div></div>
+<div class="toast" id="toast">소망 풍선이 올라갔어요 🎈</div>
+
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js"></script>
+<script>
+(async () => {
+  const A = window.SangsangApp;
+  const input = document.getElementById('wishInput');
+  const submit = document.getElementById('submitBtn');
+  const field = document.getElementById('balloonField');
+  const myWrap = document.getElementById('myWishWrap');
+  const myStage = document.getElementById('myWishStage');
+  let wishes = [];
+  let latestNewId = '';
+  A.bindModal();
+
+  function render() {
+    const myId = A.getMyWishId();
+    field.innerHTML = '';
+    wishes.forEach((w,i) => field.appendChild(A.makeBalloon(w,{index:i,mine:w.id===myId,isNew:w.id===latestNewId,onClick:A.showModal})));
+    A.setCount(wishes.length);
+    const mine = wishes.find(w=>w.id===myId);
+    if (mine) {
+      myWrap.classList.add('on');
+      myStage.innerHTML='';
+      myStage.appendChild(A.makeBalloon(mine,{mine:true,onClick:A.showModal}));
+      if (A.C.ONE_WISH_PER_DEVICE) {
+        submit.disabled = true; input.disabled = true; input.placeholder = '이 기기에서는 이미 풍선을 띄웠어요.';
+      }
+    }
+  }
+
+  async function refresh() {
+    try { wishes = await A.listWishes(); render(); A.setStatus(A.C.DEMO_MODE ? '현재는 미리보기(DEMO) 모드입니다. 실제 행사 전 Supabase 연결이 필요합니다.' : ''); }
+    catch(e){ A.setStatus(e.message || '데이터를 불러오지 못했습니다.', true); }
+  }
+
+  input.addEventListener('input',()=>document.getElementById('charCount').textContent=`${input.value.length} / ${A.C.MAX_WISH_LENGTH}`);
+  submit.addEventListener('click', async () => {
+    submit.disabled = true;
+    try {
+      const item = await A.addWish(input.value);
+      latestNewId = item.id;
+      input.value=''; document.getElementById('charCount').textContent=`0 / ${A.C.MAX_WISH_LENGTH}`;
+      await refresh();
+      A.toast('소망 풍선이 올라갔어요 🎈');
+      setTimeout(()=>{ latestNewId=''; render(); },1400);
+    } catch(e) {
+      A.toast(e.message || '잠시 후 다시 시도해주세요.');
+      if (!A.getMyWishId()) submit.disabled = false;
+    }
+  });
+  input.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key==='Enter') submit.click(); });
+  document.getElementById('findMineBtn').addEventListener('click',()=>{
+    const id=A.getMyWishId(); const el=field.querySelector(`[data-id="${id}"]`); if(el) el.scrollIntoView({behavior:'smooth',block:'center'});
+  });
+
+  await refresh();
+  await A.subscribe(refresh);
+})();
+</script>
+</body>
+</html>

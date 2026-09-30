@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>상상을 띄우다 | CAPTURE</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="capture-page">
+<div class="capture-stage" id="stage">
+  <div class="grain"></div>
+  <header class="capture-header">
+    <div class="capture-kicker">KT&amp;G 장학재단 · 대학 상상장학생 발대식</div>
+    <h1 class="capture-title">상상을 <span style="color:var(--accent)">띄우다</span> 🎈</h1>
+    <div class="capture-count"><strong data-count>0</strong>개의 상상이 함께 떠올랐습니다</div>
+  </header>
+  <div class="capture-grid" id="captureGrid"></div>
+  <div class="capture-empty" id="empty">풍선이 도착하면 이 화면에 차곡차곡 채워집니다.</div>
+</div>
+<div class="capture-toolbar" id="toolbar">
+  <button class="tool-btn" id="fullBtn">전체화면</button>
+  <button class="tool-btn" id="hideBtn">도구 숨기기 (H)</button>
+</div>
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js"></script>
+<script>
+(async () => {
+  const A=window.SangsangApp, grid=document.getElementById('captureGrid'), toolbar=document.getElementById('toolbar'), empty=document.getElementById('empty');
+  let wishes=[];
+  function dims(n){
+    if(n<=24) return [6,4];
+    if(n<=40) return [8,5];
+    if(n<=60) return [10,6];
+    if(n<=84) return [12,7];
+    if(n<=120) return [12,10];
+    return [15,10];
+  }
+  function render(){
+    const [cols,rows]=dims(wishes.length); grid.style.setProperty('--cols',cols); grid.style.setProperty('--rows',rows); grid.innerHTML='';
+    wishes.slice(0,cols*rows).forEach((w,i)=>grid.appendChild(A.makeBalloon(w,{index:i,capture:true})));
+    A.setCount(wishes.length); empty.style.display=wishes.length?'none':'block';
+  }
+  async function refresh(){ try{ wishes=await A.listWishes(); render(); }catch(e){ empty.textContent=e.message||'데이터 연결 오류'; empty.style.display='block'; } }
+  document.getElementById('fullBtn').onclick=()=>document.documentElement.requestFullscreen?.();
+  function toggleTools(){ toolbar.classList.toggle('hidden'); }
+  document.getElementById('hideBtn').onclick=toggleTools;
+  document.addEventListener('keydown',e=>{ if(e.key.toLowerCase()==='h') toggleTools(); if(e.key.toLowerCase()==='f') document.documentElement.requestFullscreen?.(); });
+  await refresh(); await A.subscribe(refresh);
+})();
+</script>
+</body>
+</html>
