@@ -9,44 +9,194 @@
 <body class="capture-page">
 <div class="capture-stage" id="stage">
   <div class="grain"></div>
-  <header class="capture-header">
+  <div class="capture-orb capture-orb-a"></div>
+  <div class="capture-orb capture-orb-b"></div>
+
+  <header class="capture-header" id="captureHeader">
     <div class="capture-kicker">KT&amp;G 장학재단 · 대학 상상장학생 발대식</div>
-    <h1 class="capture-title">상상을 <span style="color:var(--accent)">띄우다</span> 🎈</h1>
+    <h1 class="capture-title">상상을 <span>띄우다</span> 🎈</h1>
     <div class="capture-count"><strong data-count>0</strong>개의 상상이 함께 떠올랐습니다</div>
+    <div class="capture-mode-note" id="modeNote">모든 참여 풍선을 한 화면에 담았습니다.</div>
   </header>
-  <div class="capture-grid" id="captureGrid"></div>
+
+  <div class="capture-grid capture-all" id="captureGrid" aria-live="polite"></div>
   <div class="capture-empty" id="empty">풍선이 도착하면 이 화면에 차곡차곡 채워집니다.</div>
+
+  <footer class="capture-footer">
+    <span>상상장학생의 새로운 시작을 함께 띄웁니다.</span>
+  </footer>
 </div>
+
 <div class="capture-toolbar" id="toolbar">
-  <button class="tool-btn" id="fullBtn">전체화면</button>
-  <button class="tool-btn" id="hideBtn">도구 숨기기 (H)</button>
+  <button class="tool-btn active" id="allModeBtn" type="button">전체 풍선</button>
+  <button class="tool-btn" id="readableModeBtn" type="button">가독성 모드</button>
+  <button class="tool-btn" id="fullBtn" type="button">전체화면</button>
+  <button class="tool-btn" id="hideBtn" type="button">도구 숨기기 (H)</button>
 </div>
+
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="app.js"></script>
 <script>
 (async () => {
-  const A=window.SangsangApp, grid=document.getElementById('captureGrid'), toolbar=document.getElementById('toolbar'), empty=document.getElementById('empty');
-  let wishes=[];
-  function dims(n){
-    if(n<=24) return [6,4];
-    if(n<=40) return [8,5];
-    if(n<=60) return [10,6];
-    if(n<=84) return [12,7];
-    if(n<=120) return [12,10];
-    return [15,10];
+  const A = window.SangsangApp;
+  const grid = document.getElementById('captureGrid');
+  const toolbar = document.getElementById('toolbar');
+  const empty = document.getElementById('empty');
+  const header = document.getElementById('captureHeader');
+  const modeNote = document.getElementById('modeNote');
+  const allModeBtn = document.getElementById('allModeBtn');
+  const readableModeBtn = document.getElementById('readableModeBtn');
+
+  let wishes = [];
+  let mode = 'all';
+
+  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+
+  function hashNum(str) {
+    let h = 2166136261;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return Math.abs(h >>> 0);
   }
-  function render(){
-    const [cols,rows]=dims(wishes.length); grid.style.setProperty('--cols',cols); grid.style.setProperty('--rows',rows); grid.innerHTML='';
-    wishes.slice(0,cols*rows).forEach((w,i)=>grid.appendChild(A.makeBalloon(w,{index:i,capture:true})));
-    A.setCount(wishes.length); empty.style.display=wishes.length?'none':'block';
+
+  function chooseLayout(count, readable = false) {
+    if (!count) return { cols: 1, rows: 1, balloonWidth: 120, gapX: 12, gapY: 8 };
+
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const sidePad = Math.max(28, vw * 0.035);
+    const footerReserve = Math.max(24, vh * 0.038);
+    const headerBottom = header.getBoundingClientRect().bottom;
+    const top = headerBottom + Math.max(12, vh * 0.015);
+    const availableW = vw - sidePad * 2;
+    const availableH = Math.max(160, vh - top - footerReserve);
+
+    const maxCols = readable ? Math.min(8, count) : Math.min(20, count);
+    const minCols = readable ? Math.min(3, count) : 1;
+    let best = null;
+
+    for (let cols = minCols; cols <= maxCols; cols++) {
+      const rows = Math.ceil(count / cols);
+      const rowLimit = readable ? 6 : 11;
+      if (rows > rowLimit) continue;
+
+      const gapX = clamp(vw * (readable ? 0.009 : 0.0055), 5, readable ? 18 : 12);
+      const gapY = clamp(vh * (readable ? 0.012 : 0.006), 4, readable ? 16 : 9);
+      const cellW = (availableW - gapX * (cols - 1)) / cols;
+      const cellH = (availableH - gapY * (rows - 1)) / rows;
+
+      // 풍선은 폭:높이 약 0.8:1. 화면 밖으로 잘리지 않도록 높이를 더 엄격하게 제한합니다.
+      const maxBalloon = readable ? 190 : (count <= 12 ? 210 : count <= 40 ? 150 : 110);
+      const minBalloon = readable ? 88 : 34;
+      const balloonWidth = clamp(Math.min(cellW * 0.82, cellH * 0.66), minBalloon, maxBalloon);
+      const emptyCells = cols * rows - count;
+      const balancePenalty = emptyCells * (readable ? 0.35 : 0.12);
+      const score = balloonWidth - balancePenalty;
+
+      if (!best || score > best.score) {
+        best = { cols, rows, balloonWidth, gapX, gapY, top, sidePad, score };
+      }
+    }
+
+    if (!best) {
+      const cols = readable ? Math.min(6, count) : Math.min(15, count);
+      const rows = Math.ceil(count / cols);
+      best = { cols, rows, balloonWidth: readable ? 96 : 44, gapX: 6, gapY: 5, top, sidePad };
+    }
+    return best;
   }
-  async function refresh(){ try{ wishes=await A.listWishes(); render(); }catch(e){ empty.textContent=e.message||'데이터 연결 오류'; empty.style.display='block'; } }
-  document.getElementById('fullBtn').onclick=()=>document.documentElement.requestFullscreen?.();
-  function toggleTools(){ toolbar.classList.toggle('hidden'); }
-  document.getElementById('hideBtn').onclick=toggleTools;
-  document.addEventListener('keydown',e=>{ if(e.key.toLowerCase()==='h') toggleTools(); if(e.key.toLowerCase()==='f') document.documentElement.requestFullscreen?.(); });
-  await refresh(); await A.subscribe(refresh);
+
+  function setMode(nextMode) {
+    mode = nextMode;
+    const readable = mode === 'readable';
+    allModeBtn.classList.toggle('active', !readable);
+    readableModeBtn.classList.toggle('active', readable);
+    modeNote.textContent = readable
+      ? `최근 ${Math.min(36, wishes.length)}개의 상상을 크게 보여주는 가독성 모드입니다.`
+      : '모든 참여 풍선을 한 화면에 담았습니다.';
+    render();
+  }
+
+  function render() {
+    A.setCount(wishes.length);
+    empty.style.display = wishes.length ? 'none' : 'block';
+    grid.innerHTML = '';
+
+    if (!wishes.length) return;
+
+    const readable = mode === 'readable';
+    const visibleWishes = readable ? wishes.slice(-36) : wishes;
+    const layout = chooseLayout(visibleWishes.length, readable);
+
+    grid.classList.toggle('capture-readable', readable);
+    grid.classList.toggle('capture-all', !readable);
+    grid.style.top = `${layout.top}px`;
+    grid.style.left = `${layout.sidePad}px`;
+    grid.style.right = `${layout.sidePad}px`;
+    grid.style.bottom = `${Math.max(24, window.innerHeight * 0.035)}px`;
+    grid.style.gridTemplateColumns = `repeat(${layout.cols}, minmax(0, 1fr))`;
+    grid.style.gridTemplateRows = `repeat(${layout.rows}, minmax(0, 1fr))`;
+    grid.style.columnGap = `${layout.gapX}px`;
+    grid.style.rowGap = `${layout.gapY}px`;
+    grid.style.setProperty('--capture-balloon-width', `${layout.balloonWidth}px`);
+    grid.style.setProperty('--capture-font-size', `${clamp(layout.balloonWidth * (readable ? 0.092 : 0.095), readable ? 9 : 5.5, readable ? 13 : 10.5)}px`);
+
+    visibleWishes.forEach((w, i) => {
+      const el = A.makeBalloon(w, { index: i, capture: true });
+      const seed = hashNum(w.id || String(i));
+      const cellW = (window.innerWidth - layout.sidePad * 2 - layout.gapX * (layout.cols - 1)) / layout.cols;
+      const cellH = Math.max(1, (window.innerHeight - layout.top - Math.max(24, window.innerHeight * 0.035) - layout.gapY * (layout.rows - 1)) / layout.rows);
+      const offsetPattern = [-0.08, -0.035, 0.025, 0.07, 0, 0.045, -0.055];
+      const yPattern = [-0.035, 0.025, 0.04, -0.02, 0.01];
+      const x = offsetPattern[seed % offsetPattern.length] * cellW;
+      const y = yPattern[(seed >> 3) % yPattern.length] * cellH;
+      const scale = readable ? 0.98 + (seed % 5) * 0.008 : 0.96 + (seed % 7) * 0.009;
+      el.style.setProperty('--capture-x', `${x.toFixed(1)}px`);
+      el.style.setProperty('--capture-y', `${y.toFixed(1)}px`);
+      el.style.setProperty('--capture-scale', scale.toFixed(3));
+      grid.appendChild(el);
+    });
+  }
+
+  async function refresh() {
+    try {
+      wishes = await A.listWishes();
+      render();
+    } catch (e) {
+      empty.textContent = e.message || '데이터 연결 오류';
+      empty.style.display = 'block';
+    }
+  }
+
+  function toggleTools() {
+    toolbar.classList.toggle('hidden');
+    document.body.classList.toggle('capture-clean', toolbar.classList.contains('hidden'));
+  }
+
+  allModeBtn.onclick = () => setMode('all');
+  readableModeBtn.onclick = () => setMode('readable');
+  document.getElementById('fullBtn').onclick = () => document.documentElement.requestFullscreen?.();
+  document.getElementById('hideBtn').onclick = toggleTools;
+
+  document.addEventListener('keydown', e => {
+    const key = e.key.toLowerCase();
+    if (key === 'h') toggleTools();
+    if (key === 'f') document.documentElement.requestFullscreen?.();
+    if (key === 'a') setMode('all');
+    if (key === 'r') setMode('readable');
+  });
+
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(render, 120);
+  });
+
+  await refresh();
+  await A.subscribe(refresh);
 })();
 </script>
 </body>
